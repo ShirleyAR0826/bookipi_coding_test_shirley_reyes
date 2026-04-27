@@ -1,0 +1,74 @@
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Warmup phase
+    - duration: 30
+      arrivalRate: 10
+      name: "Warmup"
+    # Ramp up phase
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 50
+      name: "Ramp up"
+    # Sustained load
+    - duration: 120
+      arrivalRate: 50
+      name: "Sustained load"
+    # Spike test
+    - duration: 30
+      arrivalRate: 100
+      name: "Spike test"
+    # Cool down
+    - duration: 30
+      arrivalRate: 10
+      name: "Cool down"
+  processor: "./artillery-functions.js"
+  variables:
+    userId:
+      - "user-1"
+      - "user-2"
+      - "user-3"
+      - "user-4"
+      - "user-5"
+
+scenarios:
+  - name: "Flash Sale Purchase Flow"
+    weight: 70
+    flow:
+      # Check sale status first
+      - get:
+          url: "/api/flash-sale/status"
+          capture:
+            - json: "$.data.status"
+              as: "saleStatus"
+      # Attempt purchase if sale is active
+      - post:
+          url: "/api/flash-sale/purchase"
+          json:
+            userId: "artillery-{{ userId }}-{{ $randomString() }}"
+          capture:
+            - json: "$.success"
+              as: "purchaseSuccess"
+          expect:
+            - statusCode: [200, 400, 409, 410]
+
+  - name: "Status Check Only"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/flash-sale/status"
+          expect:
+            - statusCode: 200
+      - think: 2
+      - get:
+          url: "/api/flash-sale/config"
+          expect:
+            - statusCode: 200
+
+  - name: "User Purchase Check"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/flash-sale/purchase/artillery-user-{{ $randomInt(1, 1000) }}"
+          expect:
+            - statusCode: 200
